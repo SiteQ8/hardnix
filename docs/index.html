@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HardNix — Linux System Hardening Auditor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #090c10;
+  --bg2:      #0d1117;
+  --bg3:      #161b22;
+  --border:   #21262d;
+  --red:      #ff4757;
+  --red-dim:  #7f1d1d;
+  --green:    #23d18b;
+  --yellow:   #e3b341;
+  --blue:     #58a6ff;
+  --cyan:     #39d0d8;
+  --purple:   #bc8cff;
+  --orange:   #f97316;
+  --text:     #e6edf3;
+  --dim:      #8b949e;
+  --dimmer:   #30363d;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'JetBrains Mono',monospace;
+  background:var(--bg);
+  color:var(--text);
+  overflow-x:hidden;
+  line-height:1.6;
+}
+
+/* ── NOISE GRAIN OVERLAY ── */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;
+  z-index:0;
+  opacity:.4;
+}
+
+/* ── HERO ── */
+.hero{
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:4rem 2rem 2rem;
+  position:relative;
+  overflow:hidden;
+}
+.hero::after{
+  content:'';
+  position:absolute;
+  top:-40%;left:50%;
+  transform:translateX(-50%);
+  width:900px;height:900px;
+  background:radial-gradient(circle, rgba(255,71,87,.07) 0%, transparent 70%);
+  pointer-events:none;
+  animation:pulse 8s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:.5;transform:translateX(-50%) scale(1)} 50%{opacity:1;transform:translateX(-50%) scale(1.1)}}
+
+.scanline{
+  position:absolute;
+  top:0;left:0;right:0;
+  height:2px;
+  background:linear-gradient(90deg,transparent,var(--red),transparent);
+  animation:scan 6s linear infinite;
+  opacity:.3;
+  pointer-events:none;
+}
+@keyframes scan{from{top:0} to{top:100%}}
+
+.badge{
+  display:inline-flex;align-items:center;gap:.5rem;
+  border:1px solid var(--red-dim);
+  color:var(--red);
+  font-size:.7rem;
+  letter-spacing:.15em;
+  text-transform:uppercase;
+  padding:.3rem .8rem;
+  border-radius:2px;
+  margin-bottom:2rem;
+  background:rgba(255,71,87,.05);
+  animation:fadeup .6s ease both;
+}
+.badge::before{content:'';width:6px;height:6px;background:var(--red);border-radius:50%;animation:blink 1.2s ease infinite}
+@keyframes blink{0%,100%{opacity:1} 50%{opacity:.2}}
+
+.hero-ascii{
+  font-family:'JetBrains Mono',monospace;
+  font-size:clamp(.55rem, 1.8vw, 1.1rem);
+  color:var(--red);
+  text-shadow:0 0 30px rgba(255,71,87,.4);
+  line-height:1.2;
+  white-space:pre;
+  margin-bottom:1.5rem;
+  animation:fadeup .7s .1s ease both;
+}
+@keyframes fadeup{from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)}}
+
+.hero-subtitle{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(1rem,3vw,1.4rem);
+  font-weight:400;
+  color:var(--dim);
+  margin-bottom:.75rem;
+  text-align:center;
+  animation:fadeup .7s .2s ease both;
+}
+.hero-tagline{
+  font-size:.8rem;
+  color:var(--dimmer);
+  letter-spacing:.05em;
+  text-align:center;
+  margin-bottom:3rem;
+  animation:fadeup .7s .3s ease both;
+}
+
+.hero-btns{
+  display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;
+  animation:fadeup .7s .4s ease both;
+  margin-bottom:4rem;
+}
+.btn{
+  display:inline-flex;align-items:center;gap:.5rem;
+  padding:.65rem 1.5rem;
+  font-family:'JetBrains Mono',monospace;
+  font-size:.8rem;
+  text-decoration:none;
+  border-radius:3px;
+  transition:all .2s;
+  cursor:pointer;
+}
+.btn-primary{
+  background:var(--red);
+  color:#fff;
+  border:1px solid var(--red);
+}
+.btn-primary:hover{background:#ff6b7a;box-shadow:0 0 20px rgba(255,71,87,.4)}
+.btn-outline{
+  background:transparent;
+  color:var(--text);
+  border:1px solid var(--border);
+}
+.btn-outline:hover{border-color:var(--dim);background:var(--bg3)}
+
+/* ── TERMINAL ── */
+.terminal-wrap{
+  width:100%;max-width:900px;
+  animation:fadeup .8s .5s ease both;
+  position:relative;z-index:1;
+}
+.terminal{
+  background:#0d1117;
+  border:1px solid var(--border);
+  border-radius:8px;
+  overflow:hidden;
+  box-shadow:0 40px 100px rgba(0,0,0,.8), 0 0 0 1px rgba(255,71,87,.1);
+}
+.term-bar{
+  background:#161b22;
+  border-bottom:1px solid var(--border);
+  padding:.7rem 1rem;
+  display:flex;align-items:center;gap:.75rem;
+}
+.term-dots{display:flex;gap:.4rem}
+.term-dots span{width:12px;height:12px;border-radius:50%}
+.term-dots span:nth-child(1){background:#ff5f57}
+.term-dots span:nth-child(2){background:#febc2e}
+.term-dots span:nth-child(3){background:#28c840}
+.term-title{font-size:.72rem;color:var(--dim);margin:0 auto}
+
+.term-body{
+  padding:1.25rem 1.5rem;
+  font-size:.8rem;
+  line-height:1.7;
+  min-height:400px;
+  position:relative;
+}
+.term-line{opacity:0;animation:linein .1s ease forwards}
+@keyframes linein{to{opacity:1}}
+.c-red{color:var(--red)}
+.c-green{color:var(--green)}
+.c-yellow{color:var(--yellow)}
+.c-blue{color:var(--blue)}
+.c-cyan{color:var(--cyan)}
+.c-dim{color:var(--dim)}
+.c-orange{color:var(--orange)}
+.c-purple{color:var(--purple)}
+.bold{font-weight:700}
+.cursor{
+  display:inline-block;width:8px;height:14px;
+  background:var(--green);
+  animation:cur .7s step-end infinite;
+  vertical-align:text-bottom;
+  margin-left:2px;
+}
+@keyframes cur{0%,100%{opacity:1} 50%{opacity:0}}
+
+/* ── STATS BAR ── */
+.stats-bar{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+  background:var(--border);
+  border-top:1px solid var(--border);
+}
+.stat-cell{
+  background:var(--bg2);
+  padding:1rem;
+  text-align:center;
+}
+.stat-cell .num{font-size:1.8rem;font-weight:700;line-height:1}
+.stat-cell .lbl{font-size:.65rem;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-top:.25rem}
+
+/* ── SECTION ── */
+section{padding:6rem 2rem;position:relative}
+.section-inner{max-width:1100px;margin:0 auto}
+
+.section-label{
+  font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--red);margin-bottom:1rem;
+}
+.section-title{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(1.8rem,4vw,3rem);
+  font-weight:800;line-height:1.1;
+  margin-bottom:1rem;
+}
+
+/* ── MODULES GRID ── */
+.modules-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+  border-radius:8px;
+  overflow:hidden;
+  margin-top:3rem;
+}
+.module-card{
+  background:var(--bg2);
+  padding:1.5rem;
+  transition:background .2s;
+  position:relative;
+  overflow:hidden;
+}
+.module-card::before{
+  content:'';
+  position:absolute;
+  top:0;left:0;right:0;height:2px;
+  background:var(--accent,var(--red));
+  transform:scaleX(0);
+  transition:transform .3s;
+  transform-origin:left;
+}
+.module-card:hover{background:var(--bg3)}
+.module-card:hover::before{transform:scaleX(1)}
+
+.mod-icon{font-size:1.4rem;margin-bottom:.75rem}
+.mod-name{
+  font-size:.85rem;font-weight:700;
+  color:var(--text);margin-bottom:.25rem;
+}
+.mod-count{
+  font-size:.7rem;color:var(--accent,var(--red));
+  margin-bottom:.5rem;
+}
+.mod-desc{font-size:.75rem;color:var(--dim);line-height:1.5}
+
+/* ── SCORE SECTION ── */
+.score-section{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center}
+@media(max-width:700px){.score-grid{grid-template-columns:1fr}}
+
+.grade-table{display:flex;flex-direction:column;gap:.5rem;margin-top:2rem}
+.grade-row{
+  display:flex;align-items:center;gap:1rem;
+  padding:.6rem 1rem;
+  border-radius:4px;
+  font-size:.8rem;
+}
+.grade-row .grade{font-weight:700;font-size:1.1rem;width:2rem}
+.grade-row .bar{flex:1;height:4px;border-radius:2px;background:var(--dimmer)}
+.grade-row .bar-fill{height:100%;border-radius:2px;transition:width 1s ease}
+.grade-row .label{color:var(--dim);white-space:nowrap;font-size:.72rem}
+.grade-A .grade{color:var(--green)} .grade-A .bar-fill{background:var(--green);width:100%}
+.grade-B .grade{color:var(--cyan)}  .grade-B .bar-fill{background:var(--cyan);width:80%}
+.grade-C .grade{color:var(--yellow)}.grade-C .bar-fill{background:var(--yellow);width:60%}
+.grade-D .grade{color:var(--orange)}.grade-D .bar-fill{background:var(--orange);width:40%}
+.grade-F .grade{color:var(--red)}   .grade-F .bar-fill{background:var(--red);width:20%}
+
+.sev-grid{display:flex;flex-direction:column;gap:.75rem;margin-top:1.5rem}
+.sev-row{display:flex;align-items:center;gap:1rem;font-size:.8rem}
+.sev-badge{
+  padding:.2rem .6rem;border-radius:2px;font-size:.65rem;
+  font-weight:700;letter-spacing:.08em;width:80px;text-align:center;
+}
+.sev-pts{color:var(--dim);font-size:.75rem}
+
+/* ── INSTALL ── */
+.install-block{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:1.5rem;
+  font-size:.82rem;
+  margin-top:2rem;
+  position:relative;
+}
+.install-block .copy-btn{
+  position:absolute;top:.75rem;right:.75rem;
+  background:var(--bg2);border:1px solid var(--border);
+  color:var(--dim);font-size:.7rem;padding:.25rem .6rem;
+  border-radius:3px;cursor:pointer;transition:all .2s;
+  font-family:inherit;
+}
+.install-block .copy-btn:hover{color:var(--text);border-color:var(--dim)}
+.prompt{color:var(--green)}
+.cmd{color:var(--text)}
+.comment{color:var(--dim)}
+
+/* ── FORMATS TABS ── */
+.formats-tabs{display:flex;gap:0;margin-top:2rem;border-bottom:1px solid var(--border)}
+.tab-btn{
+  padding:.6rem 1.2rem;font-size:.78rem;
+  background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--dim);cursor:pointer;font-family:inherit;
+  transition:all .2s;margin-bottom:-1px;
+}
+.tab-btn.active{color:var(--red);border-bottom-color:var(--red)}
+.tab-btn:hover:not(.active){color:var(--text)}
+.tab-pane{display:none;margin-top:1.5rem}
+.tab-pane.active{display:block}
+
+/* ── FOOTER ── */
+footer{
+  border-top:1px solid var(--border);
+  padding:3rem 2rem;
+  text-align:center;
+  font-size:.75rem;
+  color:var(--dimmer);
+}
+footer a{color:var(--dim);text-decoration:none}
+footer a:hover{color:var(--text)}
+
+/* ── SCREENSHOT SECTION ── */
+.screenshots{display:flex;flex-direction:column;gap:2rem;margin-top:3rem}
+.screenshot-frame{
+  border:1px solid var(--border);border-radius:8px;
+  overflow:hidden;
+  box-shadow:0 20px 60px rgba(0,0,0,.6);
+}
+.screenshot-cap{font-size:.75rem;color:var(--dim);text-align:center;margin-top:.75rem}
+
+/* ── REPORT PREVIEW ── */
+.report-preview{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:8px;overflow:hidden;font-size:.75rem;
+}
+.report-header{background:var(--bg3);padding:1rem 1.5rem;border-bottom:1px solid var(--border)}
+.report-title{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700}
+.report-meta{display:flex;flex-wrap:wrap;gap:1rem;margin-top:.5rem;font-size:.7rem;color:var(--dim)}
+.report-body{padding:1.5rem}
+.finding-item{
+  display:flex;gap:.75rem;align-items:flex-start;
+  padding:.6rem 0;border-bottom:1px solid var(--border);
+}
+.finding-item:last-child{border-bottom:none}
+.sev-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:.35rem}
+
+/* ── RESPONSIVE ── */
+@media(max-width:600px){
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+  .hero-ascii{font-size:.45rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ HERO ══════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="scanline"></div>
+
+  <div class="badge">
+    <span></span>
+    v1.0.0 · Linux Hardening Auditor
+  </div>
+
+  <pre class="hero-ascii">  _  _              _ _  _ _     
+ | || |__ _ _ _ __| | \| (_)_ __
+ | __ / _` | '_/ _` | .` | \ \ /
+ |_||_\__,_|_| \__,_|_|\_|_/_\_\</pre>
+
+  <p class="hero-subtitle">System Hardening Auditor for Red Teams</p>
+  <p class="hero-tagline">107+ automated checks · 12 modules · JSON / HTML / Terminal output · Zero dependencies</p>
+
+  <div class="hero-btns">
+    <a href="https://github.com/YOUR_USERNAME/hardnix" class="btn btn-primary">
+      ⬡ GitHub
+    </a>
+    <a href="#install" class="btn btn-outline">
+      → Quick Install
+    </a>
+    <a href="#demo" class="btn btn-outline">
+      ⬢ Live Demo
+    </a>
+  </div>
+
+  <!-- ── LIVE TERMINAL ── -->
+  <div class="terminal-wrap" id="demo">
+    <div class="terminal">
+      <div class="term-bar">
+        <div class="term-dots"><span></span><span></span><span></span></div>
+        <div class="term-title">root@prod-server: ~/hardnix</div>
+      </div>
+      <div class="term-body" id="termBody">
+        <div class="term-line"><span class="c-green">root@prod-server</span><span class="c-dim">:</span><span class="c-blue">~/hardnix</span><span class="c-dim">#</span> sudo ./hardnix.sh -f html</div>
+      </div>
+
+      <div class="stats-bar" id="statsBar" style="display:none">
+        <div class="stat-cell">
+          <div class="num" id="statTotal" style="color:var(--text)">107</div>
+          <div class="lbl">Total Checks</div>
+        </div>
+        <div class="stat-cell">
+          <div class="num" id="statPass" style="color:var(--green)">79</div>
+          <div class="lbl">Passed</div>
+        </div>
+        <div class="stat-cell">
+          <div class="num" id="statFail" style="color:var(--red)">22</div>
+          <div class="lbl">Failed</div>
+        </div>
+        <div class="stat-cell">
+          <div class="num" style="color:var(--yellow)">6</div>
+          <div class="lbl">Warnings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ MODULES ═══════════════════════════════════════════════════════ -->
+<section style="padding:5rem 2rem">
+  <div class="section-inner">
+    <div class="section-label">// coverage</div>
+    <h2 class="section-title">12 Security Modules.<br>Every attack surface.</h2>
+    <p style="color:var(--dim);font-size:.85rem;max-width:600px;margin-top:.5rem">
+      Each module runs independently. Mix and match for targeted audits or run all at once for a full system baseline.
+    </p>
+
+    <div class="modules-grid">
+      <div class="module-card" style="--accent:var(--red)">
+        <div class="mod-icon">🧠</div>
+        <div class="mod-name">kernel</div>
+        <div class="mod-count">15 checks</div>
+        <div class="mod-desc">ASLR, kptr_restrict, Spectre/Meltdown mitigations, NX bit, ptrace scope, eBPF</div>
+      </div>
+      <div class="module-card" style="--accent:var(--cyan)">
+        <div class="mod-icon">🔐</div>
+        <div class="mod-name">ssh</div>
+        <div class="mod-count">18 checks</div>
+        <div class="mod-desc">Root login, PasswordAuth, weak ciphers & MACs, timeouts, AllowUsers policy</div>
+      </div>
+      <div class="module-card" style="--accent:var(--yellow)">
+        <div class="mod-icon">👤</div>
+        <div class="mod-name">users</div>
+        <div class="mod-count">11 checks</div>
+        <div class="mod-desc">UID 0 accounts, empty passwords, NOPASSWD sudo, world-writable homes</div>
+      </div>
+      <div class="module-card" style="--accent:var(--green)">
+        <div class="mod-icon">💾</div>
+        <div class="mod-name">fs</div>
+        <div class="mod-count">11 checks</div>
+        <div class="mod-desc">/tmp noexec/nosuid, world-writable files, /etc/shadow perms, unowned files</div>
+      </div>
+      <div class="module-card" style="--accent:var(--blue)">
+        <div class="mod-icon">🌐</div>
+        <div class="mod-name">network</div>
+        <div class="mod-count">17 checks</div>
+        <div class="mod-desc">IP forwarding, SYN cookies, rp_filter, ICMP redirects, firewall status</div>
+      </div>
+      <div class="module-card" style="--accent:var(--orange)">
+        <div class="mod-icon">⚙️</div>
+        <div class="mod-name">services</div>
+        <div class="mod-count">4 checks</div>
+        <div class="mod-desc">Telnet, FTP, rsh, xinetd, unnecessary daemons, excessive enabled services</div>
+      </div>
+      <div class="module-card" style="--accent:var(--purple)">
+        <div class="mod-icon">🛡️</div>
+        <div class="mod-name">pam</div>
+        <div class="mod-count">4 checks</div>
+        <div class="mod-desc">Password quality, account lockout policies, nullok, pam_limits</div>
+      </div>
+      <div class="module-card" style="--accent:var(--cyan)">
+        <div class="mod-icon">🐳</div>
+        <div class="mod-name">containers</div>
+        <div class="mod-count">7 checks</div>
+        <div class="mod-desc">Docker socket, docker group membership, AppArmor/SELinux, Seccomp, escape vectors</div>
+      </div>
+      <div class="module-card" style="--accent:var(--yellow)">
+        <div class="mod-icon">🔑</div>
+        <div class="mod-name">crypto</div>
+        <div class="mod-count">5 checks</div>
+        <div class="mod-desc">SSLv2/v3, weak TLS ciphers, GRUB password, SSH host key strength</div>
+      </div>
+      <div class="module-card" style="--accent:var(--green)">
+        <div class="mod-icon">📋</div>
+        <div class="mod-name">logging</div>
+        <div class="mod-count">5 checks</div>
+        <div class="mod-desc">auditd rules, syslog daemon, auth log permissions, logrotate</div>
+      </div>
+      <div class="module-card" style="--accent:var(--red)">
+        <div class="mod-icon">☠️</div>
+        <div class="mod-name">suid</div>
+        <div class="mod-count">5 checks</div>
+        <div class="mod-desc">SUID/SGID binaries, dangerous capabilities, GTFOBins detection, PwnKit</div>
+      </div>
+      <div class="module-card" style="--accent:var(--orange)">
+        <div class="mod-icon">⏰</div>
+        <div class="mod-name">cron</div>
+        <div class="mod-count">5 checks</div>
+        <div class="mod-desc">World-writable cron dirs, suspicious root crontabs (wget/curl/nc IOCs)</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ SCORING ════════════════════════════════════════════════════════ -->
+<section class="score-section">
+  <div class="section-inner">
+    <div class="score-grid">
+      <div>
+        <div class="section-label">// scoring</div>
+        <h2 class="section-title">Graded.<br>Not just<br>a checklist.</h2>
+        <p style="color:var(--dim);font-size:.82rem;margin-top:1rem;max-width:420px">
+          Every finding is weighted by severity and rolled up into a 0–100 score. Get actionable signal, not noise.
+        </p>
+
+        <div class="sev-grid">
+          <div class="sev-row">
+            <span class="sev-badge" style="background:#7f1d1d;color:#fca5a5">CRITICAL</span>
+            <span class="sev-pts">−10 pts per finding</span>
+          </div>
+          <div class="sev-row">
+            <span class="sev-badge" style="background:#7c2d12;color:#fdba74">HIGH</span>
+            <span class="sev-pts">−5 pts per finding</span>
+          </div>
+          <div class="sev-row">
+            <span class="sev-badge" style="background:#713f12;color:#fde68a">MEDIUM</span>
+            <span class="sev-pts">−2 pts per finding</span>
+          </div>
+          <div class="sev-row">
+            <span class="sev-badge" style="background:#1e3a5f;color:#93c5fd">LOW</span>
+            <span class="sev-pts">−1 pt per finding</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="grade-table">
+          <div class="grade-row grade-A">
+            <div class="grade">A</div>
+            <div class="bar"><div class="bar-fill"></div></div>
+            <div class="label">90–100 · Hardened</div>
+          </div>
+          <div class="grade-row grade-B">
+            <div class="grade">B</div>
+            <div class="bar"><div class="bar-fill"></div></div>
+            <div class="label">75–89 · Good</div>
+          </div>
+          <div class="grade-row grade-C">
+            <div class="grade">C</div>
+            <div class="bar"><div class="bar-fill"></div></div>
+            <div class="label">60–74 · Fair</div>
+          </div>
+          <div class="grade-row grade-D">
+            <div class="grade">D</div>
+            <div class="bar"><div class="bar-fill"></div></div>
+            <div class="label">40–59 · Weak</div>
+          </div>
+          <div class="grade-row grade-F">
+            <div class="grade">F</div>
+            <div class="bar"><div class="bar-fill"></div></div>
+            <div class="label">0–39 · Critical Risk</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ OUTPUT FORMATS ═════════════════════════════════════════════════ -->
+<section>
+  <div class="section-inner">
+    <div class="section-label">// output</div>
+    <h2 class="section-title">Three output formats.</h2>
+
+    <div class="formats-tabs">
+      <button class="tab-btn active" onclick="showTab('terminal')">terminal</button>
+      <button class="tab-btn" onclick="showTab('json')">json</button>
+      <button class="tab-btn" onclick="showTab('html')">html report</button>
+    </div>
+
+    <div class="tab-pane active" id="tab-terminal">
+      <div class="install-block" style="font-size:.78rem;line-height:2">
+        <div><span class="c-cyan">━━━  SSH DAEMON  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></div>
+        <div>&nbsp;&nbsp;<span class="c-red">❌</span> <span class="bold">[CRITICAL]</span> <span class="c-yellow">[S-001]</span>&nbsp;&nbsp; Root login disabled</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-dim">↳ PermitRootLogin = yes</span></div>
+        <div>&nbsp;&nbsp;<span class="c-green">✅</span> <span class="bold">[HIGH    ]</span> <span class="c-yellow">[S-002]</span>&nbsp;&nbsp; Password authentication disabled</div>
+        <div>&nbsp;&nbsp;<span class="c-red">❌</span> <span class="bold">[HIGH    ]</span> <span class="c-yellow">[S-014]</span>&nbsp;&nbsp; Weak SSH ciphers configured</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-dim">↳ Weak cipher detected: arcfour,3des-cbc,blowfish-cbc</span></div>
+        <div>&nbsp;&nbsp;<span class="c-green">✅</span> <span class="bold">[MEDIUM  ]</span> <span class="c-yellow">[S-010]</span>&nbsp;&nbsp; SSH Protocol 2 only</div>
+        <br>
+        <div><span class="c-cyan">━━━  USERS &amp; PRIVILEGES  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></div>
+        <div>&nbsp;&nbsp;<span class="c-red">❌</span> <span class="bold">[CRITICAL]</span> <span class="c-yellow">[U-001]</span>&nbsp;&nbsp; Non-root accounts with UID 0</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-dim">↳ Accounts: hacker</span></div>
+        <div>&nbsp;&nbsp;<span class="c-yellow">⚠️ </span> <span class="bold">[HIGH    ]</span> <span class="c-yellow">[U-004]</span>&nbsp;&nbsp; NOPASSWD sudo entries found</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-dim">↳ deploy ALL=(ALL) NOPASSWD: /usr/bin/docker</span></div>
+        <br>
+        <div><span class="c-cyan">━━━  AUDIT SUMMARY  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span></div>
+        <div>&nbsp;&nbsp;<span class="bold">Score&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</span> <span class="c-red bold">43 / 100</span></div>
+        <div>&nbsp;&nbsp;<span class="bold">Grade&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</span> <span class="c-red bold">D — Weak</span></div>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tab-json">
+      <div class="install-block" style="font-size:.76rem;line-height:1.8">
+<span class="c-dim">{</span>
+&nbsp;&nbsp;<span class="c-blue">"meta"</span>: {
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"tool"</span>: <span class="c-green">"HardNix"</span>, <span class="c-blue">"version"</span>: <span class="c-green">"1.0.0"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"hostname"</span>: <span class="c-green">"prod-server"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"timestamp"</span>: <span class="c-green">"2025-01-15T14:23:11+00:00"</span>
+&nbsp;&nbsp;},
+&nbsp;&nbsp;<span class="c-blue">"score"</span>: <span class="c-orange">62</span>,
+&nbsp;&nbsp;<span class="c-blue">"grade"</span>: <span class="c-green">"C — Fair"</span>,
+&nbsp;&nbsp;<span class="c-blue">"stats"</span>: { <span class="c-blue">"total"</span>: <span class="c-orange">107</span>, <span class="c-blue">"passed"</span>: <span class="c-orange">79</span>, <span class="c-blue">"failed"</span>: <span class="c-orange">22</span> },
+&nbsp;&nbsp;<span class="c-blue">"findings"</span>: [
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"module"</span>: <span class="c-green">"ssh"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"id"</span>: <span class="c-green">"S-001"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"severity"</span>: <span class="c-red">"CRITICAL"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"status"</span>: <span class="c-red">"FAIL"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"title"</span>: <span class="c-green">"Root login disabled"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-blue">"detail"</span>: <span class="c-green">"PermitRootLogin = yes"</span>
+&nbsp;&nbsp;&nbsp;&nbsp;},
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="c-dim">...</span>
+&nbsp;&nbsp;]
+<span class="c-dim">}</span>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tab-html">
+      <div class="report-preview">
+        <div class="report-header">
+          <div class="report-title"><span style="color:var(--red)">Hard</span>Nix — System Hardening Report</div>
+          <div class="report-meta">
+            <span><b>Host:</b> prod-server</span>
+            <span><b>Score:</b> <span style="color:var(--yellow)">62/100 · C</span></span>
+            <span><b>Checks:</b> 107 total</span>
+            <span><b>Date:</b> 2025-01-15</span>
+          </div>
+        </div>
+        <div class="report-body">
+          <div class="finding-item">
+            <div class="sev-dot" style="background:var(--red)"></div>
+            <div>
+              <span style="font-size:.65rem;background:#7f1d1d;color:#fca5a5;padding:.1rem .4rem;border-radius:2px;font-weight:700">CRITICAL</span>
+              <span style="margin-left:.5rem;font-size:.78rem;font-weight:600">Root login disabled</span>
+              <div style="font-size:.72rem;color:var(--dim);margin-top:.15rem">ssh · S-001 · PermitRootLogin = yes</div>
+            </div>
+          </div>
+          <div class="finding-item">
+            <div class="sev-dot" style="background:var(--orange)"></div>
+            <div>
+              <span style="font-size:.65rem;background:#7c2d12;color:#fdba74;padding:.1rem .4rem;border-radius:2px;font-weight:700">HIGH</span>
+              <span style="margin-left:.5rem;font-size:.78rem;font-weight:600">Unprivileged eBPF disabled</span>
+              <div style="font-size:.72rem;color:var(--dim);margin-top:.15rem">kernel · K-007 · kernel.unprivileged_bpf_disabled = 0</div>
+            </div>
+          </div>
+          <div class="finding-item">
+            <div class="sev-dot" style="background:var(--yellow)"></div>
+            <div>
+              <span style="font-size:.65rem;background:#713f12;color:#fde68a;padding:.1rem .4rem;border-radius:2px;font-weight:700">MEDIUM</span>
+              <span style="margin-left:.5rem;font-size:.78rem;font-weight:600">No account lockout in PAM</span>
+              <div style="font-size:.72rem;color:var(--dim);margin-top:.15rem">pam · P-002 · pam_faillock not configured</div>
+            </div>
+          </div>
+          <div class="finding-item">
+            <div class="sev-dot" style="background:var(--green)"></div>
+            <div>
+              <span style="font-size:.65rem;background:#14532d;color:#86efac;padding:.1rem .4rem;border-radius:2px;font-weight:700">PASS</span>
+              <span style="margin-left:.5rem;font-size:.78rem;font-weight:600">Docker not in rootless mode</span>
+              <div style="font-size:.72rem;color:var(--dim);margin-top:.15rem">containers · C-003 · Running rootless ✓</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ INSTALL ════════════════════════════════════════════════════════ -->
+<section id="install" style="background:var(--bg2);border-top:1px solid var(--border)">
+  <div class="section-inner">
+    <div class="section-label">// install</div>
+    <h2 class="section-title">Up in 30 seconds.</h2>
+
+    <div class="install-block">
+      <button class="copy-btn" onclick="copyInstall()">copy</button>
+      <div><span class="comment"># Clone and run</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">git clone https://github.com/YOUR_USERNAME/hardnix.git</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">cd hardnix && chmod +x hardnix.sh</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">sudo ./hardnix.sh</span></div>
+      <br>
+      <div><span class="comment"># Or with options</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">sudo ./hardnix.sh -m ssh,kernel,suid -f html -v</span></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-top:2rem">
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:1.25rem">
+        <div style="font-size:.7rem;color:var(--dim);margin-bottom:.5rem">// requirements</div>
+        <div style="font-size:.78rem;line-height:2">
+          <div>✓ Bash 4.0+</div>
+          <div>✓ Linux (any distro)</div>
+          <div>✓ Root for full scan</div>
+          <div>✓ Zero pip/npm/gem</div>
+        </div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:1.25rem">
+        <div style="font-size:.7rem;color:var(--dim);margin-bottom:.5rem">// tested on</div>
+        <div style="font-size:.78rem;line-height:2">
+          <div>✓ Ubuntu 20.04 / 22.04 / 24.04</div>
+          <div>✓ Debian 11 / 12</div>
+          <div>✓ RHEL 8 / 9 / AlmaLinux</div>
+          <div>✓ Kali, Parrot, BlackArch</div>
+        </div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:1.25rem">
+        <div style="font-size:.7rem;color:var(--dim);margin-bottom:.5rem">// use cases</div>
+        <div style="font-size:.78rem;line-height:2">
+          <div>✓ Post-deploy hardening checks</div>
+          <div>✓ Red team recon (scoped)</div>
+          <div>✓ CIS / STIG compliance gaps</div>
+          <div>✓ CI/CD pipeline gates</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ FOOTER ═════════════════════════════════════════════════════════ -->
+<footer>
+  <div style="font-size:1.5rem;margin-bottom:.5rem;color:var(--red)">⬡</div>
+  <div>HardNix v1.0.0 · MIT License</div>
+  <div style="margin-top:.5rem">
+    <a href="https://github.com/YOUR_USERNAME/hardnix">GitHub</a> ·
+    <a href="https://github.com/YOUR_USERNAME/hardnix/issues">Issues</a> ·
+    <a href="https://github.com/YOUR_USERNAME/hardnix/blob/main/README.md">Docs</a>
+  </div>
+  <div style="margin-top:1rem;font-size:.68rem;color:var(--dimmer)">
+    For authorized security assessments only. Never run against systems you don't own.
+  </div>
+</footer>
+
+<script>
+// ── Terminal animation ────────────────────────────────────────────────
+const lines = [
+  '',
+  '  <span class="c-red bold">  _  _              _ _  _ _     </span>',
+  '  <span class="c-red bold"> | || |__ _ _ _ __| | \\| (_)_ __</span>',
+  '  <span class="c-red bold"> | __ / _` | \'_/ _` | .` | \\ \\ /</span>',
+  '  <span class="c-red bold"> |_||_\\__,_|_| \\__,_|_|\\_|_/_\\_\\</span>',
+  '  <span class="c-dim">System Hardening Auditor v1.0.0</span>',
+  '  <span class="c-dim">For authorized security assessments only</span>',
+  '',
+  '  <span class="bold">Target   :</span> prod-server    <span class="c-dim">OS: Ubuntu 22.04 LTS</span>',
+  '  <span class="bold">Kernel   :</span> 5.15.0-91-generic',
+  '  <span class="bold">Modules  :</span> kernel ssh fs users network pam containers crypto logging suid cron',
+  '',
+  '<span class="c-cyan">━━━  KERNEL HARDENING  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>',
+  '  <span class="c-green">✅</span> <span class="bold">[HIGH    ]</span> <span class="c-yellow">[K-001]</span>  ASLR enabled (full randomization)',
+  '  <span class="c-green">✅</span> <span class="bold">[HIGH    ]</span> <span class="c-yellow">[K-002]</span>  Kernel pointer restriction (kptr_restrict)',
+  '  <span class="c-red">❌</span> <span class="bold">[HIGH    ]</span> <span class="c-yellow">[K-007]</span>  Unprivileged eBPF disabled',
+  '     <span class="c-dim">↳ kernel.unprivileged_bpf_disabled = 0 (expected 1)</span>',
+  '  <span class="c-green">✅</span> <span class="bold">[CRITICAL]</span> <span class="c-yellow">[K-013]</span>  CPU vulnerabilities mitigated',
+  '',
+  '<span class="c-cyan">━━━  SSH DAEMON  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>',
+  '  <span class="c-red">❌</span> <span class="bold">[CRITICAL]</span> <span class="c-yellow">[S-001]</span>  Root login disabled',
+  '     <span class="c-dim">↳ PermitRootLogin = yes</span>',
+  '  <span class="c-green">✅</span> <span class="bold">[HIGH    ]</span> <span class="c-yellow">[S-002]</span>  Password authentication disabled',
+  '  <span class="c-yellow">⚠️ </span> <span class="bold">[LOW     ]</span> <span class="c-yellow">[S-017]</span>  SSH running on default port 22',
+  '     <span class="c-dim">↳ Consider moving to non-standard port</span>',
+  '',
+  '<span class="c-cyan">━━━  SUID/SGID &amp; CAPABILITIES  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>',
+  '  <span class="c-red">❌</span> <span class="bold">[CRITICAL]</span> <span class="c-yellow">[SU-004]</span> GTFOBins-exploitable SUID binaries found',
+  '     <span class="c-dim">↳ python3 (/usr/bin/python3) — trivial root via os.system()</span>',
+  '  <span class="c-green">✅</span> <span class="bold">[CRITICAL]</span> <span class="c-yellow">[SU-003]</span> No binaries with dangerous capabilities',
+  '',
+  '<span class="c-cyan">━━━  AUDIT SUMMARY  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>',
+  '',
+  '  <span class="bold">Total checks :</span> 107',
+  '  <span class="c-green bold">Passed       :</span> 79',
+  '  <span class="c-red bold">Failed       :</span> 22',
+  '  <span class="c-yellow bold">Warnings     :</span> 6',
+  '',
+  '  <span class="bold">Score        :</span> <span class="c-yellow bold">62 / 100</span>',
+  '  <span class="bold">Grade        :</span> <span class="c-yellow bold">C — Fair</span>',
+  '',
+  '  <span class="c-green">✅ HTML report saved:</span> output/hardnix_prod-server_20250115.html',
+];
+
+const body = document.getElementById('termBody');
+const statsBar = document.getElementById('statsBar');
+let i = 0;
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+async function runTerminal() {
+  await delay(900);
+  for (const line of lines) {
+    const el = document.createElement('div');
+    el.className = 'term-line';
+    el.innerHTML = line === '' ? '&nbsp;' : line;
+    body.appendChild(el);
+    el.style.animationDelay = '0ms';
+    el.style.animationFillMode = 'both';
+    body.scrollTop = body.scrollHeight;
+    await delay(line.includes('━━━') ? 80 : line.includes('↳') ? 40 : 55);
+  }
+  // show cursor
+  const cur = document.createElement('span');
+  cur.className = 'cursor';
+  body.appendChild(cur);
+  // show stats
+  await delay(300);
+  statsBar.style.display = 'grid';
+}
+
+runTerminal();
+
+// ── Tab switching ─────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelector(`#tab-${name}`).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ── Copy install ──────────────────────────────────────────────────────
+function copyInstall() {
+  const txt = `git clone https://github.com/YOUR_USERNAME/hardnix.git
+cd hardnix && chmod +x hardnix.sh
+sudo ./hardnix.sh`;
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'copied!';
+    setTimeout(() => btn.textContent = 'copy', 2000);
+  });
+}
+</script>
+</body>
+</html>
