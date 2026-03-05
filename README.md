@@ -7,7 +7,10 @@
 ![Platform](https://img.shields.io/badge/Platform-Linux-orange)
 ![Version](https://img.shields.io/badge/Version-1.0.0-red)
 ![Checks](https://img.shields.io/badge/Checks-107%2B-critical)
+
+#
 ![HardNix](docs/logo-wordmark.svg)
+#
 
 HardNix performs **107+ automated security checks** across 12 modules and produces a scored, graded report in terminal, JSON, or HTML format. Built for speed, portability, and depth — no dependencies beyond standard Linux tools.
 
