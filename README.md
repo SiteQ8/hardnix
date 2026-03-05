@@ -15,9 +15,14 @@
  |_||_\__,_|_| \__,_|_|\_|_/_\_\
 \`\`\`
 
+ _  _              _ _  _ _     
+ | || |__ _ _ _ __| | \| (_)_ __
+ | __ / _` | '_/ _` | .` | \ \ /
+ |_||_\__,_|_| \__,_|_|\_|_/_\_\
+
 HardNix performs **107+ automated security checks** across 12 modules and produces a scored, graded report in terminal, JSON, or HTML format. Built for speed, portability, and depth — no dependencies beyond standard Linux tools.
 
-🌐 **[Live Demo Page →](https://YOUR_USERNAME.github.io/hardnix)**
+🌐 **[Live Demo Page →](https://siteq8.github.io/hardnix)**
 
 ---
 
@@ -51,7 +56,7 @@ HardNix performs **107+ automated security checks** across 12 modules and produc
 ## 📦 Installation
 
 \`\`\`bash
-git clone https://github.com/YOUR_USERNAME/hardnix.git
+git clone https://github.com/siteq8/hardnix.git
 cd hardnix
 chmod +x hardnix.sh
 \`\`\`
